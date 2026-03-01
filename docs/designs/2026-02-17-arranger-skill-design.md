@@ -12,7 +12,7 @@ The Dramaturg produces a design document — a vision of what *could* be built, 
 
 **The gap:** Nothing translates vision into executable plan. Without the Arranger, either the Dramaturg overreaches into implementation details (polluting design discussion) or the Conductor receives an underspecified design doc and makes implementation decisions it shouldn't — decisions about phase structure, parallelization strategy, protocol configurations, and integration patterns that haven't been validated.
 
-The Arranger is a **fact-checker and setting-decider**, not a code-writer. It stress-tests the design's feasibility, makes implementation-level decisions through research-backed discussion, and structures the work into phases that maximize parallel execution. It is the **primary point of user contact** for implementation planning — every decision must be finalized here, every protocol validated, every cross-task integration surface identified. The Conductor and later stages should never need additional research. (The Repetiteur skill handles mid-implementation consultation if blockers arise — see Section 9.)
+The Arranger is a **fact-checker and setting-decider**, not a code-writer. It stress-tests the design's feasibility, makes implementation-level decisions through research-backed discussion, and structures the work into phases that maximize parallel execution. It is the **primary point of user contact** for implementation planning — every decision must be finalized here, every protocol validated, every cross-task integration surface identified. The Conductor and later stages should not need to research protocols, configurations, or integration patterns — though the Conductor may still research decomposition ambiguities when "boots hit the ground." (The Repetiteur skill handles mid-implementation consultation if blockers arise — see Section 9.)
 
 ### Why "Arranger"?
 
@@ -34,15 +34,17 @@ dramaturg → arranger → conductor → musician
 
 ### Operating Principles
 
-**Priority chain for technical decisions:** compatibility > reliability > efficiency > security > performance
+**Priority chain for technical decisions:** compatibility > reliability > efficiency > security > performance (see `repertoire/priority-chain.md` for full rationale)
 
-Prefer modern but not bleeding-edge approaches. Future-favoring: prefer current code, APIs, and protocols that are well-established and well-documented. Security ranks below efficiency because this is a personal task management app with a narrow threat model — compatibility and reliability directly affect user experience, efficiency affects battery/resources, while security concerns are real but bounded.
+Prefer modern but not bleeding-edge approaches. Future-favoring: prefer current code, APIs, and protocols that are well-established and well-documented.
 
 **Intelligent context usage:** The process of acquiring and validating knowledge is what wastes context, not the knowledge itself. Subagents absorb acquisition costs (journal parsing, code path tracing, research dead ends); the main session receives distilled findings at appropriate detail. The Arranger is never knowledge-starved — it has access to all available knowledge. The principle is about acquiring that knowledge efficiently. See Section 4 (Research & Verification Strategy) for full details.
 
-**Document audience:** The implementation plan is primarily machine-consumed (75% Claude Code / 25% human readability) and follows **Tier 2** of the project's hybrid document structure — hybrid markdown with XML authority and structural tags (see `docs/hybrid-document-structure.md`). The decision journal follows **Tier 3** — full XML envelope with all text inside tags. The Dramaturg produces human-focused design documentation (Tier 1); the Arranger's outputs are Claude-consumed with human reviewability. This informs every output format decision.
+**Document audience:** The implementation plan is primarily machine-consumed (75% Claude Code / 25% human readability) and follows **Tier 2** of the project's hybrid document structure — hybrid markdown with XML authority and structural tags (see `docs/hybrid-document-structure.md`). The decision journal uses flat markdown with a `Strength` annotation field following the repertoire's journal conventions. The Dramaturg produces human-focused design documentation (Tier 1); the Arranger's outputs are Claude-consumed with human reviewability. This informs every output format decision.
 
-**Gemini MCP is required.** The Arranger does not launch without Gemini MCP available. Mandatory external verification categories cannot be satisfied without it. Brave-search is a fallback for web queries but cannot replace Gemini's analysis and verification capabilities.
+**Context budget: 200k target.** The Arranger is interactive, not autonomous — the user is present to make judgment calls about context pressure. No mandatory compact or forced exit. At 75% usage, recommend `/lethe compact` or session split to the user. The Phase 4/5 boundary is always presented as the recommended split point regardless of context pressure — the decision journal preserves all state from Phases 1-4, allowing a fresh session to resume at Phase 5. If the user opts into a 1M extended context window, the Arranger should still target the 200k window to minimize cost; the extra headroom is a safety net, not a budget to fill.
+
+**Gemini MCP is expected.** If Gemini MCP is unavailable at launch, the Arranger presents the user with a choice: (1) proceed in degraded mode with mandatory UNRESEARCHED marking on all items that would normally require external verification, or (2) abort. The Arranger does not silently proceed without verification capability, and does not hard-stop without user input. Brave-search remains available as a web query fallback but cannot replace Gemini's analysis capabilities.
 
 ---
 
@@ -51,17 +53,36 @@ Prefer modern but not bleeding-edge approaches. Future-favoring: prefer current 
 ### Invocation Patterns
 
 - **`/arranger @path/to/design.md`** — Direct file reference, begins processing immediately.
-- **`/arranger` (no file)** — Scans `docs/plans/designs/` for design documents. If exactly one is found, auto-selects it. If multiple are found, prompts the user to choose. If none are found, reports and stops.
+- **`/arranger` (no file)** — Scans `docs/plans/designs/` for `*-design.md` files, excluding any `superseded/` subdirectory and `*-plan.md` files. If exactly one design doc is found, auto-selects it. If multiple are found, prompts the user to choose. If none are found, reports and stops.
+
+### Feature-Name Derivation
+
+The Arranger derives `{feature-name}` from the design doc filename by stripping the date prefix and `-design` suffix:
+
+- `2026-02-17-background-sync-design.md` → `background-sync`
+- `2026-03-01-notification-system-design.md` → `notification-system`
+
+This feature-name is used for:
+- Decisions directory path: `docs/plans/designs/decisions/{feature-name}/`
+- YAML frontmatter `feature` field in the implementation plan
+- Journal filename: `arranger-journal.md` within the decisions directory
+- Downstream branch naming by the Conductor
 
 ### Ingestion Behavior
 
 The Arranger reads the design document fully, then **launches a subagent to distill the dramaturg's decision journal** (located at `docs/plans/designs/decisions/{feature-name}/dramaturg-journal.md`). The subagent returns:
 - VERIFIED items the Arranger can skip in feasibility audit (one-liner each)
 - PARTIAL items needing follow-up with specifics
+- UNRESEARCHED items — decisions made without research backing, requiring mandatory independent verification before the Arranger builds on them
 - Final decisions still in effect with rationale
 - Abandoned/invalidated approaches as one-liners (e.g., "SSE abandoned for FCM due to reliability")
+- Goal/use-case entries — inviolable user-confirmed constraints that must not be revisited without user approval
+- Tension entries — acknowledged design tensions treated as constraints on phase structuring, not problems to solve
+- Any stale in-progress entries flagged as potentially incomplete research
 
 The main session never reads the raw journal — this is the intelligent context usage principle in action. The subagent absorbs the back-and-forth; the Arranger gets the distilled findings.
+
+If the `decisions/{feature-name}/` directory does not yet exist, the Arranger creates it during ingestion. If the Dramaturg journal is not found at the expected path, the Arranger proceeds without journal distillation — the design document is the primary input.
 
 After ingestion, the Arranger **pauses to present an overview** before beginning work. This overview includes:
 - What the design covers (high-level summary)
@@ -74,12 +95,31 @@ The Arranger does **not** begin autonomous work until the user acknowledges the 
 
 ### Design Doc Completeness Check
 
-The Arranger treats the design doc as the source of truth for *what* and *why*. During ingestion, it assesses whether the design contains enough substance to plan from:
+The Arranger treats the design doc as the source of truth for *what* and *why*. During ingestion, it assesses whether the design contains enough substance to plan from using a concrete checklist:
 
-- **3 or fewer simple questions** would resolve all ambiguity → the Arranger pauses to discuss with the user during Phase 3 (Implementation Discussion). Small gaps handled inline.
-- **4+ questions needed** → the Arranger recommends re-engaging the Dramaturg to flesh out the design. Too much ambiguity for the Arranger to resolve — the fix is upstream, not mid-stream.
+- Goals section present and non-empty
+- Data model specified at architecture level
+- Error handling addressed for critical paths
+- Integration points with existing code identified
+- Arranger Notes appendix present with at least one entry
+- No unresolved PARTIAL items that block phase structuring
+
+**Assessment outcomes:**
+- **3 or fewer simple questions** would resolve remaining ambiguity → the Arranger pauses to discuss with the user during Phase 3 (Implementation Discussion). Small gaps handled inline.
+- **4+ questions needed, or systemic feasibility failure** → the Arranger recommends re-engaging the Dramaturg (see Upstream Referral Protocol below).
 
 The Arranger does NOT fill design gaps itself — that would be re-litigating design, which is explicitly not its job.
+
+### Upstream Referral Protocol
+
+When the Arranger determines the design needs fundamental revision (4+ questions needed, or systemic feasibility failure), it presents:
+
+- List of specific gaps or infeasible assumptions found
+- Topics needing Dramaturg-level exploration
+- Suggested focus areas for a follow-up session
+- Exact invocation suggestion: `/dramaturg docs/plans/designs/{design-doc-name}.md`
+
+The Arranger does not silently work around design gaps or proceed hoping for the best. The fix is upstream.
 
 ### Design Doc Consumption
 
@@ -230,9 +270,16 @@ Phases 1-4 (ingestion, feasibility, discussion, structuring) are research-heavy.
 - Header-sentinel consistency — markdown headers match their comment anchors
 - Hybrid structure tag validation — authority tags (`<mandatory>`, `<guidance>`, `<context>`) and `<core>` tags present and properly nested within phase and checkpoint sections; Tier 2 conventions followed
 - Section tag validation — `<section id="...">` tags present within each sentinel-bounded area, IDs match `<sections>` index
-- YAML frontmatter validation — required fields present (title, date, type, tier, feature)
+- YAML frontmatter validation — required fields present (title, date, type, tier, feature, design-doc)
 - Line range index generation — accurate to current file state
-- Self-containment spot-check — sample phase sections for completeness, including authority tag coverage
+- Self-containment verification — each phase section contains all 7 expected components:
+  1. Objective
+  2. Prerequisites (specific file paths and exports, not vague references)
+  3. Implementation detail
+  4. Integration points
+  5. Frontend guidelines (when applicable, inlined)
+  6. Expected outcomes
+  7. Testing recommendations
 - Large document marker test — verify sentinels and section tags are findable across the full document length
 - User override flags propagated — any overrides from journal are flagged in relevant conductor checkpoint sections
 
@@ -242,7 +289,7 @@ Phases 1-4 (ingestion, feasibility, discussion, structuring) are research-heavy.
 
 ## 4. Research & Verification Strategy
 
-Research and verification are the Arranger's core competency. **The Arranger is the primary research checkpoint in the pipeline — the conductor and later stages should never need additional research.** Every protocol validated, every platform limitation discovered, every configuration value checked — here, not downstream. (The Repetiteur handles research for mid-implementation blockers if they arise.)
+Research and verification are the Arranger's core competency. **The Arranger is the primary research checkpoint in the pipeline.** The objective is to minimize downstream research: the Conductor may still research decomposition ambiguities when conditions on the ground differ from expectations, but should never need to research protocols, configurations, or integration patterns. Every protocol validated, every platform limitation discovered, every configuration value checked — here, not downstream. (The Repetiteur handles research for mid-implementation blockers if they arise.)
 
 ### Mandatory External Verification
 
@@ -252,6 +299,16 @@ These categories **must always** be verified through Gemini or web search, never
 - **Protocols and patterns not already implemented in the project.** If the project doesn't have working code for a pattern, Claude should not trust its training-data understanding. Version-specific gotchas, ecosystem compatibility issues, and platform constraints only surface through current research. The FCM configuration that would have caused consistent app crashes is the canonical example. **If it's not already in the codebase, verify it externally.**
 - **Flutter frontend design guidelines.** Flutter's design ecosystem moves fast. Widget patterns, Material 3 guidelines, and recommended approaches evolve between Flutter releases. External references produce stronger frontend guidance than training data alone. **No exceptions, regardless of Claude's confidence level.**
 - **Specific configuration values and settings.** When the Arranger decides on a specific timeout, interval, batch size, or protocol setting, that value's validity must be checked. "Use a 5-minute polling interval" needs verification that 5 minutes is actually achievable on the target platform. **No exceptions, regardless of Claude's confidence level.** Every concrete setting value gets verified before entering the plan.
+
+### Gemini Degraded Mode
+
+If Gemini MCP becomes unavailable mid-session (after initially being available), the Arranger:
+1. Pauses and notifies the user
+2. Offers the choice to continue in degraded mode or wait/abort
+3. If continuing, marks all subsequent items that would require Gemini verification as UNRESEARCHED in the journal
+4. Adds a plan-level note in the Overview section flagging that some verification was degraded
+
+This complements the launch-time check in Section 1 — that check handles initial unavailability, this handles mid-session loss.
 
 ### "Mental Implementation" Verification
 
@@ -319,67 +376,32 @@ The decision journal is the Arranger's progressive external memory — it captur
 
 ### Format
 
-**Tier 3** append-only file at `docs/plans/designs/decisions/{feature-name}/arranger-journal.md`, using the `<journal>` document-level wrapper per the project's hybrid document structure (`docs/hybrid-document-structure.md`). All text inside tags (Tier 3 strict content rule). Each entry is a `<section>` with an incrementing ID.
+Flat markdown, append-only, at `docs/plans/designs/decisions/{feature-name}/arranger-journal.md`. Follows the repertoire's journal conventions (`repertoire/journal-conventions.md`) with the shared field set.
 
-Authority tags differentiate entry types — the tag choice signals how downstream consumers should treat the entry:
+Each entry uses this template:
 
-```xml
-<journal feature="[feature-name]" type="arranger">
+```markdown
+## [Entry N]: [Topic]
 
-<metadata>
-feature: [feature-name]
-created: YYYY-MM-DD
-type: arranger-journal
-</metadata>
-
-<sections>
-- checkpoint-1
-- override-1
-- deviation-1
-</sections>
-
-<section id="checkpoint-1">
-<core>
-## Checkpoint: [Phase Name] — [Topic]
-
-**Decision:** [What was decided]
+**Finding/Decision:** [What was decided or discovered]
 **Rationale:** [Why, including research findings that informed this]
 **Alternatives considered:** [What was rejected and why]
 **Impact:** [What this affects — phases, other decisions, integration points]
-</core>
-</section>
-
-<section id="override-1">
-<mandatory>
-## User Override: [Setting/Decision]
-
-**User's position:** [What they want]
-**Research finding:** [What was discovered]
-**User's rationale:** [Why they're overriding]
-**Flagged for conductor:** YES — checkpoint section [N] includes override notice
-</mandatory>
-</section>
-
-<section id="deviation-1">
-<context>
-## Deviation: [What Changed]
-
-**Scope:** [Structural/Implementation/Detail]
-**Previous decision:** [Reference to checkpoint-N]
-**New direction:** [What's changing]
-**Loop-back target:** Phase [N]
-</context>
-</section>
-
-</journal>
+**External input:** [Gemini findings, web search results, or "None"]
+**Strength:** [mandatory | core | context]
 ```
 
-The authority tag on each entry carries semantic meaning:
-- **`<core>`** for decisions — standard implementation decisions, the substance of the planning work
-- **`<mandatory>`** for user overrides — signals that these MUST be propagated to downstream conductor checkpoint sections. The `<mandatory>` tag ensures override entries are never treated as optional context
-- **`<context>`** for deviations — informational record of what changed and why. The deviation itself is logged but subsequent `<core>` entries contain the actual new decisions
+The `Strength` field carries semantic meaning for downstream consumers:
+- **`mandatory`** — User overrides and non-negotiable constraints. Carries strongest constraint weight. The Repetiteur's journal analysis treats these as inviolable.
+- **`core`** — Standard implementation decisions with rationale. Normal constraint weight, binding but potentially revisable during Repetiteur consultation.
+- **`context`** — Informational deviations, alternative approaches tried, abandoned directions. Weakest constraint weight, informational only.
 
-New entries are inserted before the closing `</journal>` tag with incrementing section IDs. The `<sections>` index is updated to include each new entry's ID. Entries are never edited — if a later decision supersedes an earlier one, the new entry references the old one by section ID. The journal is a log, not a living document. The final plan is compiled from the *current state* of decisions (latest wins), not from the journal directly.
+Entry type conventions:
+- **Checkpoint entries** use `Strength: core` — standard decisions made during Phases 2-5
+- **User override entries** use `Strength: mandatory` — the user disagrees with research findings and forces a decision. These MUST be propagated to the relevant conductor checkpoint section with the flag: `USER OVERRIDE: [setting] set to X despite research indicating Y — user has workaround, see journal entry [ref]`
+- **Deviation entries** use `Strength: context` — record of what changed during a loop-back and why. The deviation itself is logged; subsequent checkpoint entries contain the actual new decisions.
+
+New entries are appended at the end of the file. Entries are never edited — if a later decision supersedes an earlier one, the new entry references the old one by entry number. The journal is a log, not a living document. The final plan is compiled from the *current state* of decisions (latest wins), not from the journal directly.
 
 ### Checkpoint Triggers
 
@@ -391,7 +413,7 @@ The Arranger writes to the journal at:
 
 ### Lifecycle
 
-1. **Created** at the start of Phase 2 (Feasibility Audit) in `docs/plans/designs/decisions/{feature-name}/` — initialized with the `<journal>` wrapper, `<metadata>`, empty `<sections>` index, and closing tag
+1. **Created** at the start of Phase 2 (Feasibility Audit) in `docs/plans/designs/decisions/{feature-name}/` — initialized with a header and the first entry
 2. **Appended to** throughout Phases 2-5
 3. **Persists** after finalization — NOT archived or deleted. The journal remains available for the Repetiteur (consultation skill) and conductor reference
 4. **Cleaned up** by the conductor after implementation is complete, along with the rest of the feature's decisions directory
@@ -410,11 +432,13 @@ The implementation plan serves two audiences through interleaved sections:
 
 1. **Phase sections** — Written for the copyist. Contain detailed implementation content: what to build, how components interact, specific settings and configurations, integration points, testing recommendations. Each phase section must be **self-contained** — the copyist reads only its assigned phase section and must be able to produce complete, unambiguous task instructions from that section alone. Frontend design guidelines are **always inlined** into the phase sections that need them — never in a separate standalone block. Authority tags within phase sections distinguish non-negotiable constraints (`<mandatory>`) from recommended approaches (`<guidance>`) from core implementation content (`<core>`) — the copyist uses these signals to determine what must be preserved verbatim in task instructions vs. what can be adapted for task-level context.
 
-2. **Conductor checkpoint sections** — Written for the conductor. These are **review checklists**, not just context — the conductor must acknowledge/verify each item before proceeding to the next phase. Contain phase goals and boundaries (not prescriptive task lists), verification expectations (especially cross-task integration checks), known risks, user override flags, and guidance for the next phase. `<mandatory>` tags flag items the conductor must verify; `<guidance>` tags provide recommendations for the next phase. The conductor will read *only* these checkpoints, the overview, and the phase summary — **it will not read phase sections.** This is critical for conductor context management.
+2. **Conductor checkpoint sections** — Written for the conductor. These are **review checklists**, not just context — the conductor must acknowledge/verify each item before proceeding to the next phase. Contain phase goals and boundaries (not prescriptive task lists), verification expectations (especially cross-task integration checks), known risks, user override flags, context management recommendations (lethe compact protocol between phases), and guidance for the next phase. `<mandatory>` tags flag items the conductor must verify; `<guidance>` tags provide recommendations for the next phase. The conductor reads these checkpoints, the overview, and the phase summary as its primary inputs. **It reads phase sections for decomposition context but does not implement from them** — the Copyist and Musicians are the implementation consumers.
 
 ### Pipeline Prerequisites
 
-The dual-audience format, sentinel marker system, and hybrid structure tag conventions described below are **specifications for how the pipeline will work**. The conductor and copyist skills will need updates to support line-range extraction, selective reading, authority tag interpretation, and checkpoint-based verification. These updates are a separate concern from the Arranger design — they will be implemented when the Arranger skill is built.
+The conductor and copyist already support sentinel marker parsing, plan-index line-range extraction, selective reading, and checkpoint-based verification. Remaining deltas documented in each skill's `docs/working/` directory:
+- **Conductor:** Authority tag interpretation in phase-execution reference, Tier 2 document awareness, `overview`/`phase-summary` plan-index entries
+- **Copyist:** Authority tag consumption contract, `<section>` tag awareness, integration surface handling guidance
 
 ### Document Structure
 
@@ -424,7 +448,7 @@ The implementation plan follows Tier 2 hybrid format — YAML frontmatter for me
 ---
 title: "Implementation Plan: [Feature Name]"
 date: YYYY-MM-DD
-type: plan
+type: implementation-plan
 tier: 2
 feature: [feature-name]
 design-doc: docs/plans/designs/[design-doc-name].md
@@ -434,6 +458,8 @@ design-doc: docs/plans/designs/[design-doc-name].md
 
 <!-- plan-index:start -->
 <!-- verified:YYYY-MM-DDTHH:MM:SS -->
+<!-- overview lines:NN-NN -->
+<!-- phase-summary lines:NN-NN -->
 <!-- phase:1 lines:NN-NN title:"[Phase Title]" -->
 <!-- conductor-review:1 lines:NN-NN -->
 <!-- phase:2 lines:NN-NN title:"[Phase Title]" -->
@@ -534,7 +560,10 @@ Contracts that must be maintained.]
 
 <guidance>
 [Recommendations for task decomposition, parallelization opportunities,
-dependencies to respect.]
+dependencies to respect.
+
+Context management: Run `/lethe compact` before starting Phase 2
+to compress the completed phase work and reclaim context headroom.]
 </guidance>
 </core>
 </section>
@@ -573,7 +602,7 @@ The plan begins with a machine-readable index inside `<!-- plan-index:start -->`
 1. **Line range map** — the conductor reads the index first and knows exactly where to send the copyist without scanning the document
 2. **Lock indicator** — the index's presence confirms the finalization checklist passed. The conductor's first step is to check for `<!-- plan-index:start -->`. If absent, the plan is unverified — stop and report.
 
-The index is generated by the verification subagent during Phase 6 (Finalization) and is accurate to the committed file state.
+The index — including the `verified` timestamp — is generated by the producing skill's finalization process: the Arranger's verification subagent for original plans, the Repetiteur's finalization for remaining plans. The timestamp confirms that finalization verification passed and the index is accurate to the committed file state. (Note: `repertoire/output-format.md` currently attributes the timestamp to the Conductor — this will be corrected in the repertoire update pass.)
 
 **How the conductor uses the index:** Read the index, extract the line range for the relevant phase, tell the copyist "read lines X-Y of the implementation plan." This keeps the copyist focused on its scope and prevents the conductor from ingesting detail it doesn't need. **This line-range approach is critical for downstream context management.**
 
@@ -597,6 +626,31 @@ A self-contained phase section includes:
 **What self-containment means:** The *implementation instructions* within each phase section are complete. The copyist should rarely need to reference the overview section — doing so defeats the purpose of self-containment, which is **constraining the copyist's context usage.** The copyist has tasks to create for everything in its assigned phase; loading a large overview on top of that wastes the context it needs for task creation.
 
 **Frontend guidance is always inlined.** When phases involve Flutter UI work, the externally-researched design guidelines are duplicated into each phase section that needs them. There is no standalone Frontend Reference block. This preserves self-containment — the copyist never reads two sections. Document size increase is acceptable given the sentinel marker system provides reliable section boundaries. **If section finding fails on a larger document, the result is immediate context exhaustion** — this reinforces the importance of the finalization checklist's marker validation.
+
+### Authority Tag Consumption Contract
+
+The Arranger uses authority tags strategically, knowing how each downstream consumer interprets them:
+
+**In phase sections (consumed by Copyist):**
+- `<mandatory>` — Non-negotiable constraints. The Copyist preserves these verbatim in task instructions. The Conductor cannot override them, even within intra-phase authority. Musicians must follow exactly.
+- `<guidance>` — Recommended approaches. The Copyist can adapt these for task-level context. The Conductor can adjust based on runtime conditions.
+- `<core>` — Primary implementation content. The substance to be decomposed into task steps.
+
+**In conductor-review sections (consumed by Conductor):**
+- `<mandatory>` — Hard verification gates. Must pass before the Conductor proceeds to the next phase.
+- `<guidance>` — Recommendations for task decomposition and next-phase approach. Not blocking gates — the Conductor should consider them but can proceed if not fully satisfied.
+
+This contract means the Arranger's tag choices have downstream consequences. Marking something `<mandatory>` in a phase section means no downstream agent can modify it without user involvement. Use this tag deliberately for constraints that genuinely must be preserved.
+
+### Danger File Annotations
+
+Phase sections may contain inline annotations marking known file conflicts discovered during Phase 4 (Phase Structuring):
+
+```
+<!-- danger-file: path/to/file.dart shared-with="phase:3" -->
+```
+
+The Conductor treats these as supplementary starting points for danger file identification — self-discovery during implementation remains the primary method. The Arranger adds these annotations when cross-phase file conflicts are identified during phase structuring, providing the Conductor with advance warning.
 
 ---
 
@@ -691,13 +745,17 @@ Critical constraints appear in every section where they're relevant, not just in
 ~/.claude/skills/arranger/
   SKILL.md
   references/
-    shared-rules.md     — verification rules, output format, sentinels,
-                          hybrid structure conventions, journal format,
-                          priority chain, mental implementation,
-                          self-containment rules
+    workflow-phases.md          — phase definitions, subagent prompts, deviation detection
+    research-strategy.md        — verification categories, tool selection, mental implementation
+    output-format.md            — section writing rules, self-containment checklist
+    conversation-style.md       — interaction patterns, review process
 ```
 
-Standalone plugin alongside the other pipeline skills. The `shared-rules.md` reference is shared with the Repetiteur skill (see below).
+Standalone plugin alongside the other pipeline skills. Shared contracts are consumed from repertoire:
+- `repertoire/priority-chain.md` — trade-off ordering
+- `repertoire/verification-rules.md` — mandatory external verification categories
+- `repertoire/journal-conventions.md` — decision journal format and lifecycle
+- `repertoire/output-format.md` — plan structure, sentinel markers, plan-index
 
 ### Pipeline Position
 
@@ -714,11 +772,11 @@ The arranger consumes the dramaturg's design document and decision journal, then
 
 **Upstream — Dramaturg:** The arranger treats the design doc as settled vision. It does not re-litigate what/why decisions. The dramaturg's decision journal (with VERIFIED/PARTIAL flags) is consumed via subagent to scope the feasibility audit. If feasibility research reveals a design assumption is unworkable, the arranger surfaces this as a conflict to the user — it doesn't silently change the design direction.
 
-**Sibling — Repetiteur:** The Repetiteur is a separate skill that shares the arranger's `shared-rules.md` reference. It handles mid-implementation consultation when the conductor hits blockers that can't be resolved autonomously. The Repetiteur produces a "remaining plan" — a full, standalone implementation plan for remaining work only. Decision journals persist in `docs/plans/designs/decisions/{feature-name}/` specifically to support Repetiteur consultations. See `docs/plans/designs/2026-02-17-repetiteur-skill-notes.md` for full design notes.
+**Sibling — Repetiteur:** The Repetiteur is a separate skill that consumes the same shared repertoire contracts. It handles mid-implementation consultation when the conductor hits blockers that can't be resolved autonomously. The Repetiteur produces a "remaining plan" — a full, standalone implementation plan for remaining work only. Decision journals persist in `docs/plans/designs/decisions/{feature-name}/` specifically to support Repetiteur consultations.
 
-**Downstream — Conductor:** The conductor will read the verification index, the Overview, Phase Summary, and Conductor Review sections. It will not read phase sections directly. It will use the line range index to pass phase boundaries to the copyist. **The arranger's sentinel marker convention, hybrid structure tag conventions, and verification index are the API contract that makes this work.** Checkpoint sections are **review checklists** — items the conductor must acknowledge/verify before proceeding. They contain boundary/goal guidance for task decomposition, not prescriptive task lists, giving the conductor freedom to determine task granularity based on actual conditions.
+**Downstream — Conductor:** The conductor will read the verification index, the Overview, Phase Summary, and Conductor Review sections. It reads phase sections for decomposition context but does not implement from them — the Copyist and Musicians are the implementation consumers. It uses the line range index to pass phase boundaries to the copyist. **The arranger's sentinel marker convention, hybrid structure tag conventions, and verification index are the API contract that makes this work.** Checkpoint sections are **review checklists** — items the conductor must acknowledge/verify before proceeding. They contain boundary/goal guidance for task decomposition, not prescriptive task lists, giving the conductor freedom to determine task granularity based on actual conditions.
 
-**Downstream — Copyist:** The copyist reads only its assigned phase section (by line range from the conductor). The phase section must be self-contained — **the copyist should rarely need to reference the overview**, as doing so defeats the context-constraining purpose of self-containment. Authority tags within phase sections (`<mandatory>`, `<guidance>`, `<core>`) signal what the copyist must preserve verbatim in task instructions vs. what can be adapted for task-level context. The copyist estimates context requirements per task and can freely split tasks — the arranger's loose boundary structure enables this.
+**Downstream — Copyist:** The copyist reads only its assigned phase section (by line range from the conductor). The phase section must be self-contained — **the copyist should rarely need to reference the overview**, as doing so defeats the context-constraining purpose of self-containment. Authority tags within phase sections (`<mandatory>`, `<guidance>`, `<core>`) signal what the copyist must preserve verbatim in task instructions vs. what can be adapted for task-level context. The copyist estimates context requirements per task and may propose task splits; the Conductor approves the split plan. The Arranger's loose boundary structure enables this flexibility.
 
 **Downstream — Musician:** Musicians never read the arranger's plan directly. They receive task instructions from the copyist. The arranger's influence on musicians is indirect — through the quality and completeness of its phase sections, which determine the quality of task instructions the copyist produces.
 
@@ -743,9 +801,9 @@ Decisions made during the brainstorming process and their rationale:
 | **Phase structuring as parallelization strategy** | Flag parallelizable tasks, let conductor decide structure | The arranger's phase arrangement IS the parallelization decision. Smart decomposition (prep → dependent work → integration) unlocks parallel execution. Naive per-feature phasing forces sequential work. |
 | **Cross-task integration in conductor checkpoints** | Leave integration to musicians, catch in testing | Musicians handle errors within their scope but are blind to cross-task contract violations. Conductor checkpoints with explicit integration verification items catch these at the coordination layer. |
 | **Frontend guidance always inlined** | Standalone frontend reference block, separate document | Self-containment is non-negotiable — copyist never reads two sections. Document size increase acceptable given reliable sentinel markers. If section finding fails on larger docs, immediate context exhaustion — finalization checklist validates. |
-| **Task decomposition is conductor's concern** | Arranger prescribes exact tasks, conductor just relays | Conductor (1M context) has capacity for task decomposition. Arranger provides boundary/goal guidance in checkpoints. Copyist estimates context per task and freely splits. Loose structure enables adaptation when "boots hit the ground." |
+| **Task decomposition is conductor's concern** | Arranger prescribes exact tasks, conductor just relays | Conductor (1M context) has capacity for task decomposition. Arranger provides boundary/goal guidance in checkpoints. Copyist estimates context per task and may propose splits (Conductor approves). Loose structure enables adaptation when "boots hit the ground." |
 | **Conductor checkpoints as review checklists** | Checkpoints as context-only, checkpoints as task lists | Conductor is overseer/parent/teacher — must acknowledge/verify items before proceeding. Checklists ensure active verification, not passive context. |
-| **Repetiteur as separate skill** (not Arranger mode) | Consultation as Arranger mode, no consultation support | Interaction models diverge fundamentally — Arranger is interactive, Repetiteur is autonomous. Reinforcement principle makes mode-switching within one skill problematic. Shared `references/shared-rules.md` prevents drift. |
+| **Repetiteur as separate skill** (not Arranger mode) | Consultation as Arranger mode, no consultation support | Interaction models diverge fundamentally — Arranger is interactive, Repetiteur is autonomous. Reinforcement principle makes mode-switching within one skill problematic. Shared repertoire contracts prevent drift. |
 | **Decision journals persist** (not archived) | Archive after compilation, delete after compilation | Journals needed by Repetiteur for consultation context. Conductor cleans up after implementation complete. `decisions/{feature-name}/` directory per feature. |
 | **Truth hierarchy** (official docs > Gemini > training data) | No explicit hierarchy, case-by-case | Explicit ordering for research conflicts. Extreme cases escalate to user discussion research (forums, issue trackers) for real-world failure evidence. |
 | **User override protocol** | Silent absorption, hard refusal | User can force decisions against research. Override journaled and flagged in conductor checkpoint — risk visible to downstream. Arranger yields but ensures visibility. |
@@ -754,11 +812,11 @@ Decisions made during the brainstorming process and their rationale:
 | **Session split at Phase 4/5 boundary** | No split guidance, split at Phase 2/3 | Phases 1-4 are research-heavy, Phase 5 is output. Journal preserves state across split. Same pattern as Dramaturg. |
 | **Deviation hierarchy** (structural → implementation → detail) | Single loop-back point, no formal detection | Proportional response to changes. Structural changes need re-audit, implementation changes need re-discussion, detail changes need a quick revision. User confirms the Arranger's scope assessment. |
 | **Reinforcement of critical constraints throughout doc** | State constraints once authoritatively | Authoritative statements made once get lost during actual work. Repeated reminders at the point of relevance keep them active — both in this design doc and in the eventual skill file. |
-| **compatibility > reliability > efficiency > security > performance** | No explicit priority chain, case-by-case | Explicit ordering prevents ambiguous trade-off decisions. Modern but not bleeding edge. Security below efficiency because personal app with narrow threat model — user experience and resource efficiency are more directly impactful. |
+| **compatibility > reliability > efficiency > security > performance** | No explicit priority chain, case-by-case | Explicit ordering prevents ambiguous trade-off decisions. Modern but not bleeding edge. See `repertoire/priority-chain.md` for full rationale. |
 | **Plan replaces design doc for conductor** (not used alongside it) | Conductor reads both design doc and plan | The implementation plan carries forward all relevant design context. Requiring the conductor to read two documents wastes context and creates potential contradictions. |
 | **Invocation: direct file or auto-scan** | Always require file path, always scan | Direct path is efficient when the user knows which design. Auto-scan with single-file auto-select and multi-file prompt handles the common cases without extra user effort. |
 | **Name: "arranger"** | "blueprint," "architect," "planner" | In music, the arranger takes a composition and creates the detailed arrangement — which instruments, what's simultaneous, what's sequential. Creates a natural arts pipeline: dramaturg → arranger → conductor → musician, with copyist creating individual parts. |
 | **Tier 2 hybrid format for implementation plan** | Pure markdown, Tier 3 full XML, custom format | Tier 2 is the project default for Claude-consumed documents with human reviewability. YAML frontmatter for metadata, `<sections>` and `<section>` tags for navigation, authority tags within sections. Sentinels preserved for their specific line-range purpose — complementary systems at different levels. |
-| **Tier 3 journal with authority-differentiated entries** | Plain markdown journal, single entry type | `<journal>` wrapper with `<metadata>` and `<sections>`. Entry types distinguished by authority tag: `<core>` for decisions, `<mandatory>` for user overrides (must propagate), `<context>` for deviations (informational). Tag choice carries semantic meaning for downstream consumers. |
+| **Flat markdown journal with Strength annotation** | Tier 3 XML journal, single entry type | Flat markdown entries following repertoire journal conventions. `Strength` field (`mandatory`/`core`/`context`) carries semantic meaning: `mandatory` for user overrides (must propagate), `core` for standard decisions, `context` for deviations (informational). Preserves semantic signal without breaking Repetiteur parsing of standard journal format. |
 | **Three-layer structure** (sentinels + section tags + authority tags) | Replace sentinels with `<section>` tags, use only sentinels, single system | Three complementary levels: sentinels for line-range extraction, `<section>` tags for Tier 2 navigation, authority tags for content classification. Sentinels give machine-parseable boundaries with line ranges, `<section>` tags give standard navigation per hybrid structure, authority tags classify content within. |
 | **Plan-index and `<sections>` as complementary navigation** | Plan-index replaces `<sections>`, `<sections>` only, no navigation index | `<sections>` provides standard Tier 2 section ID navigation expected by any consumer. Plan-index adds line-range specificity and lock indication. Both maintained — `<sections>` authored during writing, plan-index generated during finalization. Consistent with Tier 2 conventions. |
