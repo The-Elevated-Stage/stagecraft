@@ -121,7 +121,7 @@ tier: 3
 - Design doc is source of truth for vision — never silently change design direction
 - Mandatory external verification for all categories in `repertoire/verification-rules.md`
 - No unimplemented protocol enters the plan without external verification
-- Session targets 200k context budget
+- Session targets 1M context budget
 
 **`preamble`** — Identity, tone, operating principles:
 - "You are the Arranger — the fact-checker and setting-decider." Not a code-writer, not a task-writer, not a re-litigation of design.
@@ -165,12 +165,12 @@ Cross-cutting references (used throughout, not in sequence):
 4. States what to do when returning — "After completing Phase N, return here and proceed to Phase N+1"
 
 **`context-management`** — Cross-cutting, folded into SKILL.md:
-- 200k target budget, user is present for judgment calls
+- 1M context window, user is present for judgment calls
 - `<mandatory>`: check context after each phase transition
 - At 75%, recommend `/lethe compact` or session split to the user
 - Phase 4/5 boundary is the recommended session split point
 - Decision journal preserves all state from Phases 1-4 for fresh session pickup at Phase 5
-- If user opts into 1M extended context, still target 200k — extra headroom is safety net
+- 1M context window is standard — manage context judiciously, not a budget to fill
 
 **`examples`** — Pointers to example files and shared repertoire examples.
 
@@ -366,7 +366,7 @@ The README follows The Elevated Stage standard demonstrated by sibling skills (R
 4. **Usage** — Invocation patterns (`/arranger @path` and `/arranger` auto-scan).
 5. **Workflow lifecycle** — ASCII flow diagram of 6 phases with loop-back points. Narrative description of each phase.
 6. **Shared protocols** — Repertoire consumption (output format, journal conventions, verification rules, priority chain).
-7. **Context management** — 200k target, Phase 4/5 split recommendation.
+7. **Context management** — 1M context window, Phase 4/5 split recommendation.
 8. **Configuration** — `.orchestra_configs/arranger`, `USE_GEMINI`, resolution order, per-key precedence.
 9. **Outputs** — Implementation plan (Tier 2) + arranger journal.
 10. **Project structure** — Directory tree.

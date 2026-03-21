@@ -5035,7 +5035,7 @@ Total for full orchestration (3 tasks, 2 checkpoints each):
   - Reviews (6 checkpoints): 36k
   - Completion: 10k
   - Buffer: 5k
-  - Total: ~71k (35% of 200k)
+  - Total: ~71k (7% of 1M)
 ```
 
 **Execution session:**
@@ -5067,7 +5067,7 @@ Total for extraction task:
   - Reviews (2 waits): 0k
   - Completion: 5k
   - Buffer: 5k
-  - Total: ~85k (42% of 200k)
+  - Total: ~85k (9% of 1M)
 ```
 
 #### Checkpoint Decisions
@@ -5076,7 +5076,7 @@ Total for extraction task:
 
 **Conductor:**
 - After completing 2-3 full review cycles
-- When context reaches 160k (80% of 200k)
+- When context reaches 800k (80% of 1M)
 - Before final completion phase
 - If many large files reviewed
 
@@ -9360,7 +9360,7 @@ WHERE task_id IN ([affected tasks]);
 
 ### Context Exhaustion
 
-**Symptoms:** Session approaching 200k token limit
+**Symptoms:** Session approaching 1M token limit
 
 **Check:**
 ```bash

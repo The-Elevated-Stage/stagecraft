@@ -174,7 +174,7 @@ Task 03: Extract Testing Patterns
 - Verification/SQL: ~3k tokens
 - Output (RAG files): ~15k tokens
 - Buffer (1.3×): ~92k tokens total
-- Context window: 200k → Usage: 46%
+- Context window: 1M → Usage: 9%
 - Risk level: Low
 ```
 
@@ -267,7 +267,7 @@ This is the reusable skeleton for any sequential task instruction file:
 # Task [N]: [Clear Imperative Title]
 
 **Parallel-safe:** Yes/No (whether this can run concurrently with other tasks)
-**Token estimate:** ~XXk tokens (XX% of 200k context window)
+**Token estimate:** ~XXk tokens (XX% of 1M context window)
 **Dependencies:** [List of prerequisite tasks or conditions]
 
 ## Objective
@@ -353,7 +353,7 @@ This is the reusable skeleton for any sequential task instruction file:
 # Task [N]: [Clear Imperative Title]
 
 **Parallel-safe:** Yes/No
-**Token estimate:** ~XXk tokens (XX% of 200k context window)
+**Token estimate:** ~XXk tokens (XX% of 1M context window)
 **Dependencies:** Task X complete, [other conditions]
 ```
 
@@ -368,7 +368,7 @@ This is the reusable skeleton for any sequential task instruction file:
 # Task 03: Extract Testing Patterns from Source Files
 
 **Parallel-safe:** Yes (reads from docs2/, writes to docs/knowledge-base/testing/)
-**Token estimate:** ~92k tokens (46% of 200k context window)
+**Token estimate:** ~92k tokens (9% of 1M context window)
 **Dependencies:** Task 01 complete (directory structure exists), Task 1.5 complete (cross-references verified)
 ```
 
@@ -778,7 +778,7 @@ Create `docs/implementation/reports/task-XX-report.md`:
 ```markdown
 ## Context Budget
 
-**Estimated total:** ~92k tokens (46% of 200k context window)
+**Estimated total:** ~92k tokens (9% of 1M context window)
 
 **Breakdown:**
 - Source file reads: ~45k tokens
@@ -1185,7 +1185,7 @@ This is a complete, working task instruction file demonstrating all patterns:
 # Task 03: Extract Testing Patterns into RAG Knowledge Base
 
 **Parallel-safe:** Yes (reads from docs2/guidelines/, writes to docs/knowledge-base/testing/)
-**Token estimate:** ~92k tokens (46% of 200k context window)
+**Token estimate:** ~92k tokens (9% of 1M context window)
 **Dependencies:** Task 01 complete (directory structure created), Task 1.5 complete (cross-references verified)
 
 ## Objective
@@ -1501,7 +1501,7 @@ VALUES ('task-03', 'I',
 
 ## Context Budget
 
-**Estimated total:** ~92k tokens (46% of 200k)
+**Estimated total:** ~92k tokens (9% of 1M)
 
 **Breakdown:**
 - Source file reads (6 files): ~45k tokens
